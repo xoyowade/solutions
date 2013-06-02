@@ -166,11 +166,12 @@ module Sudoku
     # It is used in the method below. The name BoxOfIndex begins with a 
     # capital letter, so this is a constant. Also, the array has been
     # frozen, so it cannot be modified.
-    BoxOfIndex = [
-      0,0,0,1,1,1,2,2,2,0,0,0,1,1,1,2,2,2,0,0,0,1,1,1,2,2,2,
-      3,3,3,4,4,4,5,5,5,3,3,3,4,4,4,5,5,5,3,3,3,4,4,4,5,5,5,
-      6,6,6,7,7,7,8,8,8,6,6,6,7,7,7,8,8,8,6,6,6,7,7,7,8,8,8
-    ].freeze
+    # [TODO]: generate this array
+    def index_to_box(idx)
+      row_block = idx / @side_len / @dim
+      col_block = idx % @side_len / @dim
+      row_block * @dim + col_block
+    end
 
     # This method defines a custom looping construct (an "iterator") for
     # Sudoku puzzles.  For each cell whose value is unknown, this method
@@ -181,7 +182,7 @@ module Sudoku
         (0...@side_len).each do |col|           # For each column
           index = row*@side_len+col         # Cell index for (row,col)
           next if @grid[index] != 0 # Move on if we know the cell's value 
-          box = BoxOfIndex[index]   # Figure out the box for this cell
+          box = index_to_box(index)   # Figure out the box for this cell
           yield row, col, box       # Invoke the associated block
         end
       end
@@ -230,18 +231,21 @@ module Sudoku
     end
 
     # Map box number to the index of the upper-left corner of the box.
-    BoxToIndex = [0, 3, 6, 27, 30, 33, 54, 57, 60].freeze
+    # [TODO]: generate this array
+    def box_to_index(box)
+      row = box / @dim
+      col = box % @dim
+      row * (@dim**3) + col*@dim
+    end
 
     # Return an array of all the known values in the specified box.
     def boxdigits(b)
       # Convert box number to index of upper-left corner of the box.
-      i = BoxToIndex[b]
+      i = box_to_index(b)
       # Return an array of values, with 0 elements removed.
-      [
-        @grid[i],    @grid[i+1],  @grid[i+2],
-        @grid[i+9],  @grid[i+10], @grid[i+11],
-        @grid[i+18], @grid[i+19], @grid[i+20]
-      ] - [0]
+      (i...i+@dim**3).
+        select{|x| index_to_box(x) == b}.
+        collect{|idx| @grid[idx]} - [0]
     end
   end  # This is the end of the Puzzle class
 

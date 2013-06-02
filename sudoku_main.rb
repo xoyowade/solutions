@@ -3,7 +3,14 @@ require_relative 'sudoku'
 
 include Benchmark
 
-$puzzle = <<-END
+$puzzle2 = <<-END
+1 . . .
+3 4 2 1
+4 . . .
+2 . . .
+END
+
+$puzzle3 = <<-END
 1 . . . . . . . .
 6 . . . . . . . .
 5 . . . . . . . .
@@ -14,6 +21,8 @@ $puzzle = <<-END
 3 . . . . . . . .
 7 . . . . . . . .
 END
+
+$puzzle = $puzzle3
 
 def run_benchmark
   n = 10
@@ -26,6 +35,6 @@ def run_benchmark
   end
 end
 
-#run_benchmark
+run_benchmark
 puts Sudoku.solve(Sudoku::Puzzle.new($puzzle))
 
