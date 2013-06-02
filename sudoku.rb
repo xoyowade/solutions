@@ -1,4 +1,11 @@
 include Math
+
+class String
+  def heredoc(prefix='|')
+    gsub /^\s*#{Regexp.quote(prefix)}/m, ''
+  end
+end
+
 #
 # This module defines a Sudoku::Puzzle class to represent a 9x9
 # Sudoku puzzle and also defines exception classes raised for 
@@ -51,10 +58,20 @@ module Sudoku
   #
   class Puzzle
 
+    attr_reader :side_len
+
     # These constants are used for translating between the external 
     # string representation of a puzzle and the internal representation.
-    ASCII = ".123456789"
-    BIN = "\000\001\002\003\004\005\006\007\010\011"
+    ASCII = ".1234567"\
+            "89ABCDEF"\
+            "GHIJKLMN"\
+            "OPQRSTUV"\
+            "WXYZ!@#%"
+    BIN = "\000\001\002\003\004\005\006\007"\
+          "\010\011\012\013\014\015\016\017"\
+          "\020\021\022\023\024\025\026\027"\
+          "\030\031\032\033\034\035\036\037"\
+          "\040\041\042\043\044\045\046\047"
 
     # This is the initialization method for the class. It is automatically
     # invoked on new Puzzle instances created with Puzzle.new. Pass the input
@@ -78,13 +95,14 @@ module Sudoku
       # Note that we use unless instead of if, and use it in modifier form.
       raise Invalid, "Grid is the wrong size" unless get_dimension(s.size)
       
-      # Check for invalid characters, and save the location of the first.
-      # Note that we assign and test the value assigned at the same time.
-      if i = s.index(/[^123456789\.]/)
-        # Include the invalid character in the error message.
-        # Note the Ruby expression inside #{} in string literal.
-        raise Invalid, "Illegal character #{s[i,1]} in puzzle"
-      end
+      # [TODO:] add check
+      ## Check for invalid characters, and save the location of the first.
+      ## Note that we assign and test the value assigned at the same time.
+      #if i = s.index(/[^123456789\.]/)
+      #  # Include the invalid character in the error message.
+      #  # Note the Ruby expression inside #{} in string literal.
+      #  raise Invalid, "Illegal character #{s[i,1]} in puzzle"
+      #end
 
       # The following two lines convert our string of ASCII characters
       # to an array of integers, using two powerful String methods.
@@ -172,7 +190,7 @@ module Sudoku
       # string with newlines between them. Finally, the tr() method
       # translates the binary string representation into ASCII digits.
       @side_indices.collect{|r| @grid[r*@side_len,@side_len].
-        pack("c#{@side_len}")}.join("\n").tr(BIN,ASCII)
+        pack("c#{@side_len}")}.join("~").tr(BIN+"~",ASCII+"\n")
     end
 
     # Return a duplicate of this Puzzle object.
@@ -226,9 +244,9 @@ module Sudoku
     def has_duplicates?
       # uniq! returns nil if all the elements in an array are unique.
       # So if uniq! returns something then the board has duplicates.
-      @side_indices.each {|row| return true if rowdigits(row).uniq! }
-      @side_indices.each {|col| return true if coldigits(col).uniq! }
-      @side_indices.each {|box| return true if boxdigits(box).uniq! }
+      @side_indices.each {|row| (puts "row:#{row}"; return true) if rowdigits(row).uniq! }
+      @side_indices.each {|col| (puts "col:#{col}"; return true) if coldigits(col).uniq! }
+      @side_indices.each {|box| (puts "box:#{box}"; return true) if boxdigits(box).uniq! }
       
       false  # If all the tests have passed, then the board has no duplicates
     end
@@ -305,13 +323,13 @@ module Sudoku
     until unchanged 
       unchanged = true      # Assume no cells will be changed this time
       rmin,cmin,pmin = nil  # Track cell with minimal possible set
-      min = 10              # More than the maximal number of possibilities
+      min = puzzle.side_len+1     # More than the maximal number of possibilities
 
       # Loop through cells whose value is unknown.
       puzzle.each_unknown do |row, col, box|
         # Find the set of values that could go in this cell
         p = puzzle.possible(row, col, box)
-        
+
         # Branch based on the size of the set p. 
         # We care about 3 cases: p.size==0, p.size==1, and p.size > 1.
         case p.size
@@ -354,7 +372,7 @@ module Sudoku
 
     # If we solved it with logic, return the solved puzzle.
     return puzzle if r == nil
-    
+
     # Otherwise, try each of the values in p for cell [r,c].
     # Since we're picking from a set of possible values, the guess leaves
     # the puzzle in a valid state. The guess will either lead to a solution
