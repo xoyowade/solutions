@@ -103,14 +103,56 @@ module Sudoku
     # Return the dimension if it's a valid puzzle size
     # else return nil
     def get_dimension(size)
-      @dim = sqrt(sqrt(size)).to_i
-      if (@dim**2)**2 == size
-        @puzzle_size = size
-        @side_len = @dim**2
-        @dim
+      dim = sqrt(sqrt(size)).to_i
+      if (dim**2)**2 == size
+        init_consts(dim)
+        dim
       else
         nil
       end
+    end
+
+    def init_consts(dim)
+        @dim = dim
+        @side_len = @dim**2
+        @puzzle_size = @side_len**2
+        @index_to_box = (0...@puzzle_size).collect {|i| index_to_box(i)}.freeze
+        @box_to_index = (0...@dim**2).collect {|b| box_to_index(b)}.freeze
+        @box_to_indices = (0...@dim**2).collect {|b| box_to_indices(b)}.freeze
+        @all_digits = (1..@side_len).to_a.freeze
+        @all_and_empty_digits = (0..@side_len).to_a.freeze
+        @side_indices = (0...@side_len).to_a.freeze
+        @col_to_indices = (0...@side_len).collect {|c| col_to_indices(c)}.freeze
+    end
+
+    def col_to_indices(col)
+      (col...@puzzle_size).step(@side_len).to_a
+    end
+    # This array maps from one-dimensional grid index to box number.
+    # It is used in the method below. The name BoxOfIndex begins with a 
+    # capital letter, so this is a constant. Also, the array has been
+    # frozen, so it cannot be modified.
+    # [TODO]: generate this array
+    def index_to_box(idx)
+      row_block = idx / @side_len / @dim
+      col_block = idx % @side_len / @dim
+      row_block * @dim + col_block
+    end
+
+    # Map box number to the index of the upper-left corner of the box.
+    # [TODO]: generate this array
+    def box_to_index(box)
+      row = box / @dim
+      col = box % @dim
+      row * (@dim**3) + col*@dim
+    end
+
+    def box_to_indices(b)
+      # Convert box number to index of upper-left corner of the box.
+      i = @box_to_index[b]
+      # Return an array of values, with 0 elements removed.
+      (i...i+@dim**3).
+        select{|x| @index_to_box[x] == b}
     end
 
     # Return the state of the puzzle as a string of 9 lines with 9 
@@ -129,7 +171,7 @@ module Sudoku
       # The join() method joins the elements of the array into a single
       # string with newlines between them. Finally, the tr() method
       # translates the binary string representation into ASCII digits.
-      (0...@side_len).collect{|r| @grid[r*@side_len,@side_len].
+      @side_indices.collect{|r| @grid[r*@side_len,@side_len].
         pack("c#{@side_len}")}.join("\n").tr(BIN,ASCII)
     end
 
@@ -155,34 +197,24 @@ module Sudoku
     # the cell at (row, col) to newvalue.
     def []=(row, col, newvalue)
       # Raise an exception unless the new value is in the range 0 to 9.
-      unless (0..@side_len).include? newvalue
+      unless @all_and_empty_digits.include? newvalue
         raise Invalid, "illegal cell value" 
       end
       # Set the appropriate element of the internal array to the value.
       @grid[row*@side_len + col] = newvalue
     end
 
-    # This array maps from one-dimensional grid index to box number.
-    # It is used in the method below. The name BoxOfIndex begins with a 
-    # capital letter, so this is a constant. Also, the array has been
-    # frozen, so it cannot be modified.
-    # [TODO]: generate this array
-    def index_to_box(idx)
-      row_block = idx / @side_len / @dim
-      col_block = idx % @side_len / @dim
-      row_block * @dim + col_block
-    end
 
     # This method defines a custom looping construct (an "iterator") for
     # Sudoku puzzles.  For each cell whose value is unknown, this method
     # passes ("yields") the row number, column number, and box number to the 
     # block associated with this iterator.
     def each_unknown
-      (0...@side_len).each do |row|             # For each row
-        (0...@side_len).each do |col|           # For each column
+      @side_indices.each do |row|             # For each row
+        @side_indices.each do |col|           # For each column
           index = row*@side_len+col         # Cell index for (row,col)
           next if @grid[index] != 0 # Move on if we know the cell's value 
-          box = index_to_box(index)   # Figure out the box for this cell
+          box = @index_to_box[index]   # Figure out the box for this cell
           yield row, col, box       # Invoke the associated block
         end
       end
@@ -194,9 +226,9 @@ module Sudoku
     def has_duplicates?
       # uniq! returns nil if all the elements in an array are unique.
       # So if uniq! returns something then the board has duplicates.
-      (0...@side_len).each {|row| return true if rowdigits(row).uniq! }
-      (0...@side_len).each {|col| return true if coldigits(col).uniq! }
-      (0...@side_len).each {|box| return true if boxdigits(box).uniq! }
+      @side_indices.each {|row| return true if rowdigits(row).uniq! }
+      @side_indices.each {|col| return true if coldigits(col).uniq! }
+      @side_indices.each {|box| return true if boxdigits(box).uniq! }
       
       false  # If all the tests have passed, then the board has no duplicates
     end
@@ -206,8 +238,7 @@ module Sudoku
     # Note that the + operator on arrays does concatenation but that the - 
     # operator performs a set difference operation.
     def possible(row, col, box)
-      (1..@side_len).to_a.freeze - 
-        (rowdigits(row) + coldigits(col) + boxdigits(box))
+      @all_digits - (rowdigits(row) + coldigits(col) + boxdigits(box))
     end
 
     private  # All methods after this line are private to the class
@@ -222,30 +253,16 @@ module Sudoku
     # Return an array of all known values in the specified column.
     def coldigits(col)
       result = []                # Start with an empty array
-      (col...@puzzle_size).
-        step(@side_len) do |i|   # Loop from col by nines up to 80
+      @col_to_indices[col].each do |i|   # Loop from col by nines up to 80
         v = @grid[i]             # Get value of cell at that index
         result << v if (v != 0)  # Add it to the array if non-zero
       end
       result                     # Return the array
     end
 
-    # Map box number to the index of the upper-left corner of the box.
-    # [TODO]: generate this array
-    def box_to_index(box)
-      row = box / @dim
-      col = box % @dim
-      row * (@dim**3) + col*@dim
-    end
-
     # Return an array of all the known values in the specified box.
     def boxdigits(b)
-      # Convert box number to index of upper-left corner of the box.
-      i = box_to_index(b)
-      # Return an array of values, with 0 elements removed.
-      (i...i+@dim**3).
-        select{|x| index_to_box(x) == b}.
-        collect{|idx| @grid[idx]} - [0]
+      @box_to_indices[b].collect{|idx| @grid[idx]} - [0]
     end
   end  # This is the end of the Puzzle class
 
