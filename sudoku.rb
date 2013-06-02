@@ -1,3 +1,4 @@
+include Math
 #
 # This module defines a Sudoku::Puzzle class to represent a 9x9
 # Sudoku puzzle and also defines exception classes raised for 
@@ -72,9 +73,10 @@ module Sudoku
       # alters the string directly rather than making a copy.
       s.gsub!(/\s/, "")  # /\s/ is a Regexp that matches any whitespace
 
+      # Calculate the puzzle dimension
       # Raise an exception if the input is the wrong size.
       # Note that we use unless instead of if, and use it in modifier form.
-      raise Invalid, "Grid is the wrong size" unless s.size == 81
+      raise Invalid, "Grid is the wrong size" unless get_dimension(s.size)
       
       # Check for invalid characters, and save the location of the first.
       # Note that we assign and test the value assigned at the same time.
@@ -96,6 +98,21 @@ module Sudoku
       raise Invalid, "Initial puzzle has duplicates" if has_duplicates?
     end
 
+    # Check validity of the puzzle size by testing whether the puzzle size is
+    # a square of square of an integer.
+    # Return the dimension if it's a valid puzzle size
+    # else return nil
+    def get_dimension(size)
+      @dim = sqrt(sqrt(size)).to_i
+      if (@dim**2)**2 == size
+        @puzzle_size = size
+        @side_len = @dim**2
+        @dim
+      else
+        nil
+      end
+    end
+
     # Return the state of the puzzle as a string of 9 lines with 9 
     # characters (plus newline) each.  
     def to_s
@@ -112,7 +129,8 @@ module Sudoku
       # The join() method joins the elements of the array into a single
       # string with newlines between them. Finally, the tr() method
       # translates the binary string representation into ASCII digits.
-      (0..8).collect{|r| @grid[r*9,9].pack('c9')}.join("\n").tr(BIN,ASCII)
+      (0...@side_len).collect{|r| @grid[r*@side_len,@side_len].
+        pack("c#{@side_len}")}.join("\n").tr(BIN,ASCII)
     end
 
     # Return a duplicate of this Puzzle object.
@@ -129,7 +147,7 @@ module Sudoku
     def [](row, col)
       # Convert two-dimensional (row,col) coordinates into a one-dimensional
       # array index and get and return the cell value at that index
-      @grid[row*9 + col]
+      @grid[row*@side_len + col]
     end
 
     # This method allows the array access operator to be used on the 
@@ -137,11 +155,11 @@ module Sudoku
     # the cell at (row, col) to newvalue.
     def []=(row, col, newvalue)
       # Raise an exception unless the new value is in the range 0 to 9.
-      unless (0..9).include? newvalue
+      unless (0..@side_len).include? newvalue
         raise Invalid, "illegal cell value" 
       end
       # Set the appropriate element of the internal array to the value.
-      @grid[row*9 + col] = newvalue
+      @grid[row*@side_len + col] = newvalue
     end
 
     # This array maps from one-dimensional grid index to box number.
@@ -159,9 +177,9 @@ module Sudoku
     # passes ("yields") the row number, column number, and box number to the 
     # block associated with this iterator.
     def each_unknown
-      0.upto 8 do |row|             # For each row
-        0.upto 8 do |col|           # For each column
-          index = row*9+col         # Cell index for (row,col)
+      (0...@side_len).each do |row|             # For each row
+        (0...@side_len).each do |col|           # For each column
+          index = row*@side_len+col         # Cell index for (row,col)
           next if @grid[index] != 0 # Move on if we know the cell's value 
           box = BoxOfIndex[index]   # Figure out the box for this cell
           yield row, col, box       # Invoke the associated block
@@ -175,22 +193,20 @@ module Sudoku
     def has_duplicates?
       # uniq! returns nil if all the elements in an array are unique.
       # So if uniq! returns something then the board has duplicates.
-      0.upto(8) {|row| return true if rowdigits(row).uniq! }
-      0.upto(8) {|col| return true if coldigits(col).uniq! }
-      0.upto(8) {|box| return true if boxdigits(box).uniq! }
+      (0...@side_len).each {|row| return true if rowdigits(row).uniq! }
+      (0...@side_len).each {|col| return true if coldigits(col).uniq! }
+      (0...@side_len).each {|box| return true if boxdigits(box).uniq! }
       
       false  # If all the tests have passed, then the board has no duplicates
     end
-
-    # This array holds a set of all Sudoku digits. Used below.
-    AllDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9].freeze
 
     # Return an array of all values that could be placed in the cell 
     # at (row,col) without creating a duplicate in the row, column, or box.
     # Note that the + operator on arrays does concatenation but that the - 
     # operator performs a set difference operation.
     def possible(row, col, box)
-      AllDigits - (rowdigits(row) + coldigits(col) + boxdigits(box))
+      (1..@side_len).to_a.freeze - 
+        (rowdigits(row) + coldigits(col) + boxdigits(box))
     end
 
     private  # All methods after this line are private to the class
@@ -199,16 +215,17 @@ module Sudoku
     def rowdigits(row)
       # Extract the subarray that represents the row and remove all zeros.
       # Array subtraction is set difference, with duplicate removal.
-      @grid[row*9,9] - [0]
+      @grid[row*@side_len,@side_len] - [0]
     end
 
     # Return an array of all known values in the specified column.
     def coldigits(col)
       result = []                # Start with an empty array
-      col.step(80, 9) {|i|       # Loop from col by nines up to 80
+      (col...@puzzle_size).
+        step(@side_len) do |i|   # Loop from col by nines up to 80
         v = @grid[i]             # Get value of cell at that index
         result << v if (v != 0)  # Add it to the array if non-zero
-      }
+      end
       result                     # Return the array
     end
 

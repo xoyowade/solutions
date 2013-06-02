@@ -26,6 +26,6 @@ def run_benchmark
   end
 end
 
-run_benchmark
-#puts Sudoku.solve(Sudoku::Puzzle.new($puzzle))
+#run_benchmark
+puts Sudoku.solve(Sudoku::Puzzle.new($puzzle))
 
