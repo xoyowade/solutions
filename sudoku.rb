@@ -2,7 +2,10 @@ include Math
 
 class String
   def heredoc(prefix='|')
-    gsub /^\s*#{Regexp.quote(prefix)}/m, ''
+    gsub(/^\s*#{Regexp.quote(prefix)}/m, '')
+  end
+  def to_syms
+    scan(/./).collect {|x| x.to_sym}
   end
 end
 
@@ -62,16 +65,13 @@ module Sudoku
 
     # These constants are used for translating between the external 
     # string representation of a puzzle and the internal representation.
-    ASCII = ".1234567"\
+    CHARS = ".1234567"\
             "89ABCDEF"\
             "GHIJKLMN"\
             "OPQRSTUV"\
             "WXYZ!@#%"
-    BIN = "\000\001\002\003\004\005\006\007"\
-          "\010\011\012\013\014\015\016\017"\
-          "\020\021\022\023\024\025\026\027"\
-          "\030\031\032\033\034\035\036\037"\
-          "\040\041\042\043\044\045\046\047"
+    VALID_SYMBOLS = CHARS.to_syms.freeze
+    EMPTY_SYMBOL = :"."
 
     # This is the initialization method for the class. It is automatically
     # invoked on new Puzzle instances created with Puzzle.new. Pass the input
@@ -94,26 +94,17 @@ module Sudoku
       # Raise an exception if the input is the wrong size.
       # Note that we use unless instead of if, and use it in modifier form.
       raise Invalid, "Grid is the wrong size" unless get_dimension(s.size)
-      
-      # [TODO:] add check
-      ## Check for invalid characters, and save the location of the first.
-      ## Note that we assign and test the value assigned at the same time.
-      #if i = s.index(/[^123456789\.]/)
-      #  # Include the invalid character in the error message.
-      #  # Note the Ruby expression inside #{} in string literal.
-      #  raise Invalid, "Illegal character #{s[i,1]} in puzzle"
-      #end
 
-      # The following two lines convert our string of ASCII characters
-      # to an array of integers, using two powerful String methods.
-      # The resulting array is stored in the instance variable @grid
-      # The number 0 is used to represent an unknown value.
-      s.tr!(ASCII, BIN)      # Translate ASCII characters into bytes
-      @grid = s.unpack('c*') # Now unpack the bytes into an array of numbers
-                             # c means 8-bit signed integer, * means repeated
-
+      @grid = s.to_syms
+      # Check for invalid characters, and save the location of the first.
+      if (invalid_symbol = @grid - VALID_SYMBOLS).size > 0
+        raise Invalid, "Illegal character found: #{invalid_symbol.uniq}"
+      end
       # Make sure that the rows, columns, and boxes have no duplicates.
       raise Invalid, "Initial puzzle has duplicates" if has_duplicates?
+
+      @all_symbols = @grid.uniq
+      @all_nonempty_symbols = @all_symbols - [EMPTY_SYMBOL]
     end
 
     # Check validity of the puzzle size by testing whether the puzzle size is
@@ -137,8 +128,6 @@ module Sudoku
         @index_to_box = (0...@puzzle_size).collect {|i| index_to_box(i)}.freeze
         @box_to_index = (0...@dim**2).collect {|b| box_to_index(b)}.freeze
         @box_to_indices = (0...@dim**2).collect {|b| box_to_indices(b)}.freeze
-        @all_digits = (1..@side_len).to_a.freeze
-        @all_and_empty_digits = (0..@side_len).to_a.freeze
         @side_indices = (0...@side_len).to_a.freeze
         @col_to_indices = (0...@side_len).collect {|c| col_to_indices(c)}.freeze
     end
@@ -150,7 +139,6 @@ module Sudoku
     # It is used in the method below. The name BoxOfIndex begins with a 
     # capital letter, so this is a constant. Also, the array has been
     # frozen, so it cannot be modified.
-    # [TODO]: generate this array
     def index_to_box(idx)
       row_block = idx / @side_len / @dim
       col_block = idx % @side_len / @dim
@@ -158,7 +146,6 @@ module Sudoku
     end
 
     # Map box number to the index of the upper-left corner of the box.
-    # [TODO]: generate this array
     def box_to_index(box)
       row = box / @dim
       col = box % @dim
@@ -189,8 +176,10 @@ module Sudoku
       # The join() method joins the elements of the array into a single
       # string with newlines between them. Finally, the tr() method
       # translates the binary string representation into ASCII digits.
-      @side_indices.collect{|r| @grid[r*@side_len,@side_len].
-        pack("c#{@side_len}")}.join("~").tr(BIN+"~",ASCII+"\n")
+      @side_indices.collect{|r| 
+        @grid[r*@side_len,@side_len].        # line symbol array
+          collect{|sym| sym.to_s}.join(" ")  # line string
+        }.join("\n")
     end
 
     # Return a duplicate of this Puzzle object.
@@ -215,7 +204,7 @@ module Sudoku
     # the cell at (row, col) to newvalue.
     def []=(row, col, newvalue)
       # Raise an exception unless the new value is in the range 0 to 9.
-      unless @all_and_empty_digits.include? newvalue
+      unless @all_symbols.include? newvalue
         raise Invalid, "illegal cell value" 
       end
       # Set the appropriate element of the internal array to the value.
@@ -228,12 +217,12 @@ module Sudoku
     # passes ("yields") the row number, column number, and box number to the 
     # block associated with this iterator.
     def each_unknown
-      @side_indices.each do |row|             # For each row
-        @side_indices.each do |col|           # For each column
-          index = row*@side_len+col         # Cell index for (row,col)
-          next if @grid[index] != 0 # Move on if we know the cell's value 
-          box = @index_to_box[index]   # Figure out the box for this cell
-          yield row, col, box       # Invoke the associated block
+      @side_indices.each do |row|              # For each row
+        @side_indices.each do |col|            # For each column
+          index = row*@side_len+col            # Cell index for (row,col)
+          next if @grid[index] != EMPTY_SYMBOL # Move on if we know the cell's value 
+          box = @index_to_box[index]           # Figure out the box for this cell
+          yield row, col, box                  # Invoke the associated block
         end
       end
     end
@@ -256,7 +245,7 @@ module Sudoku
     # Note that the + operator on arrays does concatenation but that the - 
     # operator performs a set difference operation.
     def possible(row, col, box)
-      @all_digits - (rowdigits(row) + coldigits(col) + boxdigits(box))
+      @all_nonempty_symbols - (rowdigits(row) + coldigits(col) + boxdigits(box))
     end
 
     private  # All methods after this line are private to the class
@@ -265,7 +254,7 @@ module Sudoku
     def rowdigits(row)
       # Extract the subarray that represents the row and remove all zeros.
       # Array subtraction is set difference, with duplicate removal.
-      @grid[row*@side_len,@side_len] - [0]
+      @grid[row*@side_len,@side_len] - [EMPTY_SYMBOL]
     end
 
     # Return an array of all known values in the specified column.
@@ -273,14 +262,14 @@ module Sudoku
       result = []                # Start with an empty array
       @col_to_indices[col].each do |i|   # Loop from col by nines up to 80
         v = @grid[i]             # Get value of cell at that index
-        result << v if (v != 0)  # Add it to the array if non-zero
+        result << v if (v != EMPTY_SYMBOL)  # Add it to the array if non-zero
       end
       result                     # Return the array
     end
 
     # Return an array of all the known values in the specified box.
     def boxdigits(b)
-      @box_to_indices[b].collect{|idx| @grid[idx]} - [0]
+      @box_to_indices[b].collect{|idx| @grid[idx]} - [EMPTY_SYMBOL]
     end
   end  # This is the end of the Puzzle class
 
