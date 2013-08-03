@@ -13,7 +13,7 @@ public:
         int s = p+1;
         while (s < intervals.size()) {
             if (intervals[p].end >= intervals[s].start) {
-                intervals[p].end = max(intervals[p].end, intervals[s].end); 
+                intervals[p].end = max(intervals[p].end, intervals[s].end);
             } else {
                 break;
             }
@@ -30,7 +30,7 @@ public:
     }
     vector<Interval> merge(vector<Interval> &intervals, Interval newInterval, int p) {
         if (p > 0 && newInterval.start <= intervals[p-1].end) {
-            intervals[p-1].end = newInterval.end;
+            intervals[p-1].end = max(intervals[p-1].end, newInterval.end);
             return merge(intervals, p-1);
         }
         if (newInterval.end >= intervals[p].start) {
